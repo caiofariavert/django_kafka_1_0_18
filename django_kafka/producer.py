@@ -9,6 +9,7 @@ from django.conf import settings
 # Configura o logger específico para a sua biblioteca
 logger = logging.getLogger(__name__)
 
+
 def producer(
     topic: str, message: str, key: str = None, on_delivery: FunctionType = None
 ) -> None:
@@ -29,7 +30,11 @@ def producer(
     }
 
     producer.produce(
-        topic, key=key, value=message, on_delivery=on_delivery or delivery_report, headers=headers
+        topic,
+        key=key,
+        value=message,
+        on_delivery=on_delivery or delivery_report,
+        headers=headers,
     )
     producer.flush()
 

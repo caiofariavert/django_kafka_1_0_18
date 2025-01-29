@@ -1,7 +1,16 @@
 import logging
+import time
 
 from confluent_kafka import Consumer, Message
 from django.conf import settings
+from django.db import connection
+
+from django_kafka.errors import (
+    ConnectionClosedException,
+    DatabaseShutDownException,
+    RestartConsumerError,
+)
+from django_kafka.producer import producer
 
 # Configura o logger específico para a sua biblioteca
 logger = logging.getLogger(__name__)
@@ -9,12 +18,24 @@ logger = logging.getLogger(__name__)
 KAFKA_RUNNING: bool = True
 
 
-def kafka_consumer_run() -> None:
+def ensure_connection():
+    if connection.connection is not None and connection.connection.closed:
+        connection.close()
+    try:
+        connection.ensure_connection()
+    except Exception as e:
+        logger.error(f"Error connecting to DB: {str(e)}")
+        raise RestartConsumerError("Failed to connect to DB.")
+
+
+def __kafka_consumer_run() -> None:
 
     conf = {
         "bootstrap.servers": settings.KAFKA_BOOTSTRAP_SERVER,
         "group.id": settings.KAFKA_GROUP_ID,
-        "auto.offset.reset": settings.KAFKA_OFFSET_RESET if hasattr(settings, "KAFKA_OFFSET_RESET") else "earliest",
+        "auto.offset.reset": settings.KAFKA_OFFSET_RESET
+        if hasattr(settings, "KAFKA_OFFSET_RESET")
+        else "earliest",
     }
 
     consumer: Consumer = Consumer(conf)
@@ -43,11 +64,35 @@ def kafka_consumer_run() -> None:
 
             # call the callback string as function
             dynamic_call_action(callback, consumer, msg)
+    except RestartConsumerError:
+        try:
+            consumer.close()
+        except Exception as e:
+            # print(e)
+            logger.error(e)
+        raise RestartConsumerError("Restart consumer please")
     except Exception as e:
         # print(e)
         logger.error(e)
     finally:
         consumer.close()
+
+
+def kafka_consumer_run():
+    while True:
+        try:
+            print("Verify db connection")
+            ensure_connection()
+            print("Initing consumer")
+            __kafka_consumer_run()
+            logger.info("Consumer stopped.")
+            break
+        except RestartConsumerError:
+            print("Restarting consumer...")
+            time.sleep(10)
+            continue
+        except Exception as e:
+            logger.error(e)
 
 
 def kafka_consumer_shutdown() -> None:
@@ -82,7 +127,16 @@ def dynamic_call_action(action: str, consumer: Consumer, msg: Message) -> None:
     # call function
     try:
         function(consumer=consumer, msg=msg)
-    except:
+    except DatabaseShutDownException as e:
+        logger.error("Error connecting to database:", str(e))
+        print("Produzindo novamente a mensagem:", msg.topic(), msg.value())
+        producer(msg.topic(), msg.value())
+        raise RestartConsumerError("Restart consumer please")
+    except ConnectionClosedException as e:
+        logger.error("Error connecting to Kafka:", str(e))
+        producer(msg.topic(), msg.value())
+        raise RestartConsumerError("Restart consumer please")
+    except Exception as e:
         # print("Error calling action: {}".format(action))
         logger.error("Error calling action: {}".format(action))
-        return
+        raise e
