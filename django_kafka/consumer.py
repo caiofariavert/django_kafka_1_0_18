@@ -39,7 +39,6 @@ def __kafka_consumer_run() -> None:
     }
 
     consumer: Consumer = Consumer(conf)
-
     topics: list[str] = [key for key, _ in settings.KAFKA_TOPICS.items()]
 
     consumer.subscribe(topics)
@@ -79,20 +78,29 @@ def __kafka_consumer_run() -> None:
 
 
 def kafka_consumer_run():
+    attempts = 0
     while True:
         try:
+            if attempts < 10:
+                attempts += 1
+            else:
+                print("Too many attempts, stopping consumer.")
+                break
             print("Verify db connection")
             ensure_connection()
             print("Initing consumer")
             __kafka_consumer_run()
+            attempts = 0
             logger.info("Consumer stopped.")
             break
         except RestartConsumerError:
             print("Restarting consumer...")
-            time.sleep(10)
+            time.sleep(10 * attempts)
             continue
         except Exception as e:
-            logger.error(e)
+            print("unexpected exception", e)
+            time.sleep(20 * attempts)
+            continue
 
 
 def kafka_consumer_shutdown() -> None:
