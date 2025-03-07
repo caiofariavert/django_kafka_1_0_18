@@ -75,6 +75,7 @@ def __kafka_consumer_run() -> None:
         logger.error(e)
     finally:
         consumer.close()
+        raise RestartConsumerError("Restart consumer please")
 
 
 def kafka_consumer_run():
