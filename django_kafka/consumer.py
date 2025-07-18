@@ -100,7 +100,6 @@ def kafka_consumer_run():
             continue
         except Exception as e:
             print("unexpected exception", e)
-            time.sleep(20 * attempts)
             continue
 
 
