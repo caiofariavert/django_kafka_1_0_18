@@ -115,20 +115,20 @@ def dynamic_call_action(action: str, consumer: Consumer, msg: Message) -> None:
     # get path keeping last part splited by dot
     function_name: str = action.split(".")[-1]
 
-    # import module
+    import importlib
     try:
         module = __import__(module_path, fromlist=[function_name])
-    except:
-        # print("No module found for action: {}".format(action))
-        logger.error("No module found for action: {}".format(action))
+        # reload o módulo para garantir que alterações sejam refletidas
+        module = importlib.reload(module)
+    except Exception as e:
+        logger.error(f"No module found or error reloading for action: {action} - {e}")
         return
 
     # get function from module
     try:
         function = getattr(module, function_name)
-    except:
-        # print("No function found for action: {}".format(action))
-        logger.error("No function found for action: {}".format(action))
+    except Exception as e:
+        logger.error(f"No function found for action: {action} - {e}")
         return
 
     # call function
