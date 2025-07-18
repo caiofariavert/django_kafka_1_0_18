@@ -71,8 +71,7 @@ def __kafka_consumer_run() -> None:
             logger.error(e)
         raise RestartConsumerError("Restart consumer please")
     except Exception as e:
-        # print(e)
-        logger.error(e)
+        raise Exception(f"Unexpected error: {e}")
     finally:
         consumer.close()
         raise RestartConsumerError("Restart consumer please")
